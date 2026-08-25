@@ -1,0 +1,69 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Client {
+  id        Int       @id @default(autoincrement())
+  name      String
+  phone     String?
+  email     String?
+  createdAt DateTime  @default(now())
+  deletedAt DateTime?
+
+  tickets Ticket[]
+
+  @@map("clients")
+}
+
+// Ported from Project CRM (#08)'s Ticket (itself from apps/crm-svc's
+// HelpdeskController) — same field set. `contractId` dropped (nothing
+// project/contract-shaped here — this is meant as a bare "did my thing get
+// done" inbox, bundled into other CRMs rather than sold standalone, per the
+// catalog GTM).
+model Ticket {
+  id        Int       @id @default(autoincrement())
+  clientId  Int
+  title     String
+  body      String
+  response  String?
+  priority  String    @default("medium")
+  category  String?
+  status    String    @default("open")
+  closedAt  DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  client        Client                 @relation(fields: [clientId], references: [id])
+  notifications WhatsAppNotification[]
+
+  @@map("tickets")
+}
+
+// New — not a port of WhatsAppBatch's actual shape. The catalog names
+// "WhatsAppBatch" as a reuse, but that model's real shape (day-numbered
+// batches, daily quota, round-robin-by-country interleaving — see
+// WhatsApp-Only CRM #13) is built for scheduling a cold-outreach campaign
+// against a big lead list. A "plain inbox" that WhatsApps a customer when
+// their ticket status changes needs none of that — no campaign clock, no
+// quota, one notification per event. Kept only the part of the WhatsApp
+// pattern that actually fits: a flat PENDING/SENT status queue (same
+// simulate-only shape as WhatsAppBatchLead — a human opens wa.me and sends
+// manually, then marks it here).
+model WhatsAppNotification {
+  id        Int       @id @default(autoincrement())
+  ticketId  Int
+  phone     String
+  message   String
+  status    String    @default("PENDING") // PENDING | SENT
+  sentAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  ticket Ticket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+
+  @@map("whatsapp_notifications")
+}
